@@ -240,8 +240,7 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 		     (ARRAY_SIZE(msg_ram->rx_fifo1) << CAN_MCAN_RXF1C_F1S_POS);
 	can->rxbc = ((uint32_t)msg_ram->rx_buffer & CAN_MCAN_RXBC_RBSA);
 	can->txefc = ((uint32_t)msg_ram->tx_event_fifo & CAN_MCAN_TXEFC_EFSA_MSK) |
-		     (ARRAY_SIZE(msg_ram->tx_event_fifo) <<
-		     CAN_MCAN_TXEFC_EFS_POS);
+		     (ARRAY_SIZE(msg_ram->tx_event_fifo) << CAN_MCAN_TXEFC_EFS_POS);
 	can->txbc = ((uint32_t)msg_ram->tx_fifo & CAN_MCAN_TXBC_TBSA) |
 		    (ARRAY_SIZE(msg_ram->tx_fifo) << CAN_MCAN_TXBC_TFQS_POS);
 	if (sizeof(msg_ram->tx_fifo[0].data) <= 24) {
@@ -254,7 +253,7 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 		can->rxesc = (((sizeof(msg_ram->rx_fifo0[0].data) - 8) / 4) <<
 				CAN_MCAN_RXESC_F0DS_POS) |
 			     (((sizeof(msg_ram->rx_fifo1[0].data) - 8) / 4) <<
-				CAN_MCAN_RXESC_F1DS_POS) |
+				CAN_MCAN_RXESC_F1DS_POS) | 
 			     (((sizeof(msg_ram->rx_buffer[0].data) - 8) / 4) <<
 				CAN_MCAN_RXESC_RBDS_POS);
 	} else {
@@ -359,6 +358,7 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 		LOG_ERR("Failed to leave init mode");
 		return -EIO;
 	}
+	SCB_InvalidateDCache_by_Addr((uint32_t *)msg_ram, sizeof(struct can_mcan_msg_sram));
 
 	/* No memset because only aligned ptr are allowed */
 	for (uint32_t *ptr = (uint32_t *)msg_ram;
@@ -367,6 +367,7 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 	     ptr++) {
 		*ptr = 0;
 	}
+	SCB_CleanDCache_by_Addr((uint32_t *)msg_ram, sizeof(struct can_mcan_msg_sram));
 
 	return 0;
 }
@@ -667,6 +668,8 @@ int can_mcan_send(const struct can_mcan_config *cfg,
 		tx_hdr.ext_id = frame->id;
 	}
 
+	SCB_InvalidateDCache_by_Addr((uint32_t *)msg_ram, sizeof(struct can_mcan_msg_sram));
+
 	msg_ram->tx_fifo[put_idx].hdr = tx_hdr;
 
 	for (src = frame->data_32,
@@ -679,6 +682,8 @@ int can_mcan_send(const struct can_mcan_config *cfg,
 
 	data->tx_fin_cb[put_idx] = callback;
 	data->tx_fin_cb_arg[put_idx] = callback_arg;
+
+	SCB_CleanDCache_by_Addr((uint32_t *)msg_ram, sizeof(struct can_mcan_msg_sram));
 
 	can->txbar = (1U << put_idx);
 

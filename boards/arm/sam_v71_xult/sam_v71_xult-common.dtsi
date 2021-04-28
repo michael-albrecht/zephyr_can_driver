@@ -24,7 +24,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,can-primary = &can0;
+		zephyr,can-primary = &can1;
 	};
 
 	leds {
@@ -188,10 +188,31 @@
 	bus-speed = <125000>;
 	sjw = <1>;
 	sample-point = <875>;
+	// sjw = <5>;
+	// prop-seg = <0>;
+	// phase-seg1 = <34>;
+	// phase-seg2 = <5>;
 	bus-speed-data = <1000000>;
 	sjw-data = <1>;
 	sample-point-data = <875>;
 };
+
+&can1 {
+	status = "okay";
+
+	pinctrl-0 = <&pc12c_can1_rx &pc14c_can1_tx>;
+	bus-speed = <125000>;
+	sjw = <1>;
+	sample-point = <875>;
+	// sjw = <3>;
+	// prop-seg = <0>;
+	// phase-seg1 = <3>;
+	// phase-seg2 = <9>;
+	bus-speed-data = <1000000>;
+	sjw-data = <1>;
+	sample-point-data = <875>;
+};
+
 
 &wdt {
 	status = "okay";

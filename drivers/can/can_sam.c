@@ -22,12 +22,34 @@ static int can_sam_init(const struct device *dev)
 	struct can_mcan_msg_sram *msg_ram = cfg->msg_sram;
 	int ret;
 
+	LOG_DBG("can_sam_init() called.");
+
+
+	/* Start the USB PLL */
+	PMC->CKGR_UCKR |= CKGR_UCKR_UPLLEN;
+	/* Wait for it to be ready */
+	while (!(PMC->PMC_SR & PMC_SR_LOCKU)) {
+		k_yield();
+	}
+
+	PMC->PMC_SCDR = PMC_SCDR_PCK5;
+	while ((PMC->PMC_SCSR) & PMC_SCSR_PCK5) {}
+	/* Select UPLL clock as PCK5 clock */
+	PMC->PMC_PCK[5] = PMC_PCK_CSS_UPLL_CLK | PMC_PCK_PRES(11);
+	/* Select PLLA clock as PCK5 clock */
+	//PMC->PMC_PCK[5] = PMC_PCK_CSS_PLLA_CLK | PMC_PCK_PRES(14);
+	/* Enable PCK5 clock */
+	PMC->PMC_SCER = PMC_SCER_PCK5;
+	/* Wait for PCK5 setup to complete */
+	while (!((PMC->PMC_SR) & PMC_SR_PCKRDY5)) {}
+
 	soc_pmc_peripheral_enable(cfg->periph_id);
 
 	soc_gpio_list_configure(cfg->pins, cfg->num_pins);
 
 	ret = can_mcan_init(dev, mcan_cfg, msg_ram, mcan_data);
 	if (ret) {
+		printk("error calling can_mcan_init(): %d\n", ret);
 		return ret;
 	}
 
@@ -40,10 +62,9 @@ static void can_sam_isr_0(const struct device *dev)
 {
 	const struct can_sam_config *cfg = DEV_CFG(dev);
 	const struct can_mcan_config *mcan_cfg = &cfg->mcan_cfg;
-	struct can_mcan_reg *can = mcan_cfg->can;
 	struct can_mcan_data *mcan_data = &DEV_DATA(dev)->mcan_data;
 	struct can_mcan_msg_sram *msg_ram = cfg->msg_sram;
-    
+    LOG_DBG("can_sam_isr_0() called.");
     can_mcan_line_0_isr(mcan_cfg, msg_ram, mcan_data);
 }
 
@@ -51,10 +72,9 @@ static void can_sam_isr_1(const struct device *dev)
 {
 	const struct can_sam_config *cfg = DEV_CFG(dev);
 	const struct can_mcan_config *mcan_cfg = &cfg->mcan_cfg;
-	struct can_mcan_reg *can = mcan_cfg->can;
 	struct can_mcan_data *mcan_data = &DEV_DATA(dev)->mcan_data;
 	struct can_mcan_msg_sram *msg_ram = cfg->msg_sram;
-
+    LOG_DBG("can_sam_isr_1() called.");
 	can_mcan_line_1_isr(mcan_cfg, msg_ram, mcan_data);
 }
 
@@ -120,7 +140,7 @@ enum can_state can_sam_get_state(const struct device *dev,
 static int can_sam_get_core_clock(const struct device *dev, uint32_t *rate)
 {
 	ARG_UNUSED(dev);
-	*rate = SOC_ATMEL_SAM_MCK_FREQ_HZ;
+	*rate = 40000000;
 	return 0;
 }
 
@@ -136,12 +156,12 @@ static const struct can_driver_api can_api_funcs = {
 #endif
 	.get_core_clock = can_sam_get_core_clock,
 	.register_state_change_isr = NULL,
-	.timing_min = { .sjw = 0x7f,
+	.timing_min = { .sjw = 0x01,
 			.prop_seg = 0x00,
 			.phase_seg1 = 0x01,
 			.phase_seg2 = 0x01,
 			.prescaler = 0x01 },
-	.timing_max = { .sjw = 0x7f,
+	.timing_max = { .sjw = 0x80,
 			.prop_seg = 0x00,
 			.phase_seg1 = 0x100,
 			.phase_seg2 = 0x80,
@@ -173,18 +193,17 @@ static const struct can_driver_api can_api_funcs = {
 #endif /* CONFIG_CAN_FD_MODE */
 
 #define SAM_MCAN_INIT(inst)						       \
-	DEVICE_DECLARE(CONCAT(can_sam_, inst));			       \
 	static void CONCAT(can_sam_irq_config_, inst)()		       \
 	{								       \
 		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, 0, irq),		       \
 			    DT_INST_IRQ_BY_IDX(inst, 0, priority),	       \
-			    can_sam_isr0, DEVICE_GET(CONCAT(can_sam_, inst)), \
+			    can_sam_isr_0, DEVICE_DT_INST_GET(inst), \
 			    0);						       \
 		irq_enable(DT_INST_IRQ_BY_IDX(inst, 0, irq));		       \
 		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, 1, irq),		       \
 			    DT_INST_IRQ_BY_IDX(inst, 1, priority),	       \
-			    can_sam_isr1, DEVICE_GET(CONCAT(can_sam_, inst)), \
-			    1);						       \
+			    can_sam_isr_1, DEVICE_DT_INST_GET(inst), \
+			    0);						       \
 		irq_enable(DT_INST_IRQ_BY_IDX(inst, 1, irq));		       \
 	}								       \
 									       \
@@ -204,12 +223,12 @@ static const struct can_driver_api can_api_funcs = {
 			      .ts2 = DT_INST_PROP_OR(inst, phase_seg2, 0),     \
 			      SAM_MCAN_FD_CONFIG(inst) },		       \
 		.irq_config = CONCAT(can_sam_irq_config_, inst),	       \
-		.periph_id = DT_INST_PROP(inst, peripheral_id),		\
+		.periph_id = DT_INST_PROP_BY_IDX(inst, peripheral_id, 0),		\
 		.num_pins = ATMEL_SAM_DT_NUM_PINS(inst),			\
 		.pins = ATMEL_SAM_DT_PINS(inst),				\
 	};								       \
 	static struct can_sam_data CONCAT(can_sam_data_, inst);	       \
-	DEVICE_DT_INST_DEFINE(0, &can_sam_init, device_pm_control_nop,	       \
+	DEVICE_DT_INST_DEFINE(inst, &can_sam_init, device_pm_control_nop,	       \
 			      &CONCAT(can_sam_data_, inst),		       \
 			      &CONCAT(can_sam_cfg_, inst), POST_KERNEL,       \
 			      CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &can_api_funcs);

@@ -198,12 +198,14 @@ void main(void)
 	k_tid_t rx_tid, get_state_tid;
 	int ret;
 
+	//SCB_DisableDCache();
 	can_dev = device_get_binding(DT_CHOSEN_ZEPHYR_CAN_PRIMARY_LABEL);
 
 	if (!can_dev) {
 		printk("CAN: Device driver not found.\n");
 		return;
 	}
+	printk("CAN device handle is %p, name is %s\n", can_dev, log_strdup(can_dev->name));
 
 #ifdef CONFIG_LOOPBACK_MODE
 	can_set_mode(can_dev, CAN_LOOPBACK_MODE);

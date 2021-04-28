@@ -1,4 +1,4 @@
-#if defined(CONFIG_CAN_SAM0)
+#if defined(CONFIG_CAN_SAM0) || defined(CONFIG_CAN_SAM)
     SECTION_DATA_PROLOGUE(can_msg_sram,(NOLOAD),) {
         *(.can_msg_sram)
         *(".can_msg_sram.*")
